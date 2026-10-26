@@ -126,6 +126,7 @@ async function load(){
     let url=GL+"/items?$select=Id,Title,Ligne,Famille,SousFamille,Marque,Modele,TypePiece,RefFabricant,RefInterne,NumFiche,Emplacement,Rayon,Position,QteInventoriee,UniteInv,RefsComp,QteUnitaire,UniteComptage,Commentaire,Traitee,Attachments&$orderby=Id&$top=1000";
     const all=[];
     while(url){ const r=await sp(url); all.push(...r.value); url=r['odata.nextLink']||null; }
+    all.sort((x,y)=>String(x.Ligne).localeCompare(String(y.Ligne),undefined,{numeric:true}));
     items=all;
   }catch(e){
     center('<p>Chargement impossible.</p><p class="tag">'+esc(e.message)+'</p><button class="btn" onclick="load()">Réessayer</button>');
@@ -184,7 +185,7 @@ function draw(){
   '<div class="card">'+
     '<div class="tag">'+esc(it.Ligne)+(pos>=0?' · '+(pos+1)+' sur '+o.length+' dans la sélection':'')+(it.Traitee?' · déjà traitée':'')+'</div>'+
     '<h1>'+esc(it.Title)+'</h1>'+
-    '<div class="meta"><b>'+esc(it.Rayon)+'</b> · Position '+esc(it.Position)+(it.Emplacement?' · '+esc(it.Emplacement):'')+(it.NumFiche?' · Fiche '+esc(it.NumFiche):'')+'</div>'+
+    '<div class="meta">'+esc([it.Rayon,it.Position&&'Position '+it.Position,it.Emplacement,it.NumFiche&&'Fiche '+it.NumFiche].filter(Boolean).join(' · '))+'</div>'+
     '<div class="meta">Réf. fabricant : <b>'+esc(it.RefFabricant||'-')+'</b> · Réf. interne : <b>'+esc(it.RefInterne||'-')+'</b></div>'+
     '<div class="meta">'+esc([it.Marque,it.Modele,it.TypePiece].filter(Boolean).join(' · '))+'</div>'+
     '<div class="qte">Quantité inventoriée : '+esc(it.QteInventoriee==null?'-':it.QteInventoriee)+' '+esc(it.UniteInv||'')+'</div>'+
@@ -223,8 +224,8 @@ function rmPhoto(k){draft.photos.splice(k,1);draw()}
 
 function nextId(from,dir){
   const o=order();
-  if(dir>0){const n=o.find(x=>x.Id>from);return n?n.Id:(o.length?o[0].Id:null)}
-  const p=[...o].reverse().find(x=>x.Id<from);return p?p.Id:(o.length?o[o.length-1].Id:null);
+  if(dir>0){const k=items.findIndex(x=>x.Id===from);const n=o.find(x=>items.indexOf(x)>k);return n?n.Id:(o.length?o[0].Id:null)}
+  const k2=items.findIndex(x=>x.Id===from);const p=[...o].reverse().find(x=>items.indexOf(x)<k2);return p?p.Id:(o.length?o[o.length-1].Id:null);
 }
 
 $('bSave').onclick=()=>{
