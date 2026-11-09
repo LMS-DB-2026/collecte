@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>Collecte inventaire</title>
+<title>Catalogue photos S5</title>
 <style>
 :root{--bg:#f2f2f2;--card:#fff;--ink:#1a1a1a;--mut:#666;--line:#d0d0d0;--btn:#2b2b2b;--btnink:#fff;--soft:#e6e6e6;--bad:#8a1c1c}
 @media (prefers-color-scheme:dark){:root{--bg:#141414;--card:#1f1f1f;--ink:#eee;--mut:#999;--line:#3a3a3a;--btn:#e8e8e8;--btnink:#111;--soft:#2c2c2c;--bad:#e08a8a}}
@@ -49,13 +49,14 @@ textarea{min-height:76px;resize:vertical}
 </head>
 <body>
 <div id="top" hidden>
-  <div class="r1"><span class="t">Inventaire S5 HK Mahenge</span><span><small id="who"></small> <button class="link" id="reload">Actualiser</button> <button class="link" id="out">Quitter</button></span></div>
+  <div class="r1"><span class="t">Catalogue photos S5 HK</span><span><small id="who"></small> <button class="link" id="reload">Actualiser</button> <button class="link" id="out">Quitter</button></span></div>
   <div class="bar"><i id="prog"></i></div>
   <small id="stat"></small>
   <div class="filters" style="margin-top:6px">
+    <select id="fGrp"><option value="">Tous les groupes</option><option>Mercedes</option><option>Remorques</option><option>Autres</option></select>
     <select id="fRay"></select>
-    <select id="fMode"><option value="todo">À traiter</option><option value="done">Traitées</option><option value="all">Toutes</option></select>
-    <input id="fQ" type="search" placeholder="Rechercher (désignation, réf.)">
+    <select id="fMode"><option value="todo">À photographier</option><option value="done">Complètes</option><option value="all">Toutes</option></select>
+    <input id="fQ" type="search" placeholder="Rechercher (désignation, réf., fiche)">
   </div>
 </div>
 <main id="main"></main>
@@ -74,11 +75,11 @@ const CFG={
   tenant:'f49028b5-31be-4f3a-b5a1-97ea7b9c5c2f',
   host:'https://lmsgrp-my.sharepoint.com',
   site:'/personal/dblanchard_lms-group_net',
-  list:'/personal/dblanchard_lms-group_net/Lists/Collecte inventaire S5 HK'
+  list:'/personal/dblanchard_lms-group_net/Lists/Catalogue S5 HK'
 };
 const SCOPES=[CFG.host+'/AllSites.Write'];
 const GL="/_api/web/GetList('"+encodeURI(CFG.list)+"')";
-const UNITS=['pièce','lot','boîte','sachet','rouleau','mètre','kg','litre'];
+const MINP=2;
 const pca=new msal.PublicClientApplication({
   auth:{clientId:CFG.clientId,authority:'https://login.microsoftonline.com/'+CFG.tenant,redirectUri:location.origin+location.pathname},
   cache:{cacheLocation:'localStorage'}
@@ -113,7 +114,7 @@ async function start(){
     if(res&&res.account)pca.setActiveAccount(res.account);
   }catch(e){ center('<p>Connexion impossible.</p><p class="tag">'+esc(e.message||e)+'</p><button class="btn" onclick="login()">Réessayer</button>'); return; }
   if(!pca.getAllAccounts().length){
-    center('<h1>Collecte inventaire</h1><p>Connectez-vous avec votre compte professionnel.</p><button class="btn" onclick="login()">Se connecter</button>');
+    center('<h1>Catalogue photos S5 HK</h1><p>Connectez-vous avec votre compte professionnel.</p><button class="btn" onclick="login()">Se connecter</button>');
     return;
   }
   await load();
@@ -121,9 +122,9 @@ async function start(){
 function login(){ pca.loginRedirect({scopes:SCOPES}); }
 
 async function load(){
-  center('<p>Chargement des lignes...</p>');
+  center('<p>Chargement des pièces...</p>');
   try{
-    let url=GL+"/items?$select=Id,Title,Ligne,Famille,SousFamille,Marque,Modele,TypePiece,RefFabricant,RefInterne,NumFiche,Emplacement,Rayon,Position,QteInventoriee,UniteInv,RefsComp,QteUnitaire,UniteComptage,Commentaire,Traitee,Attachments&$orderby=Id&$top=1000";
+    let url=GL+"/items?$select=Id,Title,Ligne,Groupe,Famille,SousFamille,Marque,Modele,TypePiece,RefFabricant,RefInterne,NumFiche,Emplacement,Rayon,Position,QteInventoriee,Commentaire,Traitee,NbPhotos&$orderby=Id&$top=1000";
     const all=[];
     while(url){ const r=await sp(url); all.push(...r.value); url=r['odata.nextLink']||null; }
     all.sort((x,y)=>String(x.Ligne).localeCompare(String(y.Ligne),undefined,{numeric:true}));
@@ -142,67 +143,72 @@ async function load(){
 }
 
 function order(){
-  const ray=$('fRay').value,mode=$('fMode').value,q=$('fQ').value.trim().toLowerCase();
+  const grp=$('fGrp').value,ray=$('fRay').value,mode=$('fMode').value,q=$('fQ').value.trim().toLowerCase();
   return items.filter(i=>{
+    if(grp&&i.Groupe!==grp)return false;
     if(ray&&(i.Rayon||'')!==ray)return false;
-    if(mode==='todo'&&i.Traitee)return false;
-    if(mode==='done'&&!i.Traitee)return false;
+    if(mode==='todo'&&done(i))return false;
+    if(mode==='done'&&!done(i))return false;
     if(q){const s=[i.Title,i.RefFabricant,i.RefInterne,i.Marque,i.Modele,i.Position,i.NumFiche].join(' ').toLowerCase();if(!s.includes(q))return false}
     return true;
   });
 }
+function done(i){return (i.NbPhotos||0)>=MINP||i.Traitee===true}
 function firstOrder(){const o=order();return o.length?o[0].Id:null}
 
 function stats(){
-  const d=items.filter(i=>i.Traitee).length;
+  const d=items.filter(done).length;
   $('prog').style.width=(items.length?100*d/items.length:0)+'%';
-  $('stat').textContent=d+' / '+items.length+' traitées'+(pending?' · envoi en cours ('+pending+')':'')+(failed.length?' · '+failed.length+' en échec':'');
+  $('stat').textContent=d+' / '+items.length+' pièces complètes'+(pending?' · envoi en cours ('+pending+')':'')+(failed.length?' · '+failed.length+' en échec':'');
 }
 
 function openItem(id){
   cur=id;stats();
   const it=items.find(i=>i.Id===id);
   if(!it){
-    show('<div class="center"><p>Aucune ligne dans cette sélection.</p></div>'+banners());
+    show('<div class="center"><p>Aucune pièce dans cette sélection.</p></div>'+banners());
     $('bSave').disabled=true;$('bSkip').disabled=true;$('bPrev').disabled=true;return;
   }
   $('bSave').disabled=false;$('bSkip').disabled=false;$('bPrev').disabled=false;
-  draft={id:it.Id,refs:it.RefsComp||'',qu:it.QteUnitaire==null?'':it.QteUnitaire,unit:it.UniteComptage||'',com:it.Commentaire||'',photos:[]};
+  draft={id:it.Id,com:it.Commentaire||'',photos:[],force:false};
   draw();
   window.scrollTo(0,0);
 }
 function banners(){
   let h='';
-  failed.forEach((f,k)=>{h+='<div class="msg bad">Échec ligne '+esc(f.job.ligne)+' : '+esc(f.err)+' <button class="link" onclick="retry('+k+')">Réessayer</button></div>'});
+  failed.forEach((f,k)=>{h+='<div class="msg bad">Échec pièce '+esc(f.job.ligne)+' : '+esc(f.err)+' <button class="link" onclick="retry('+k+')">Réessayer</button></div>'});
   return h;
+}
+function missing(it){return Math.max(0,MINP-(it.NbPhotos||0)-draft.photos.length)}
+function foot(){
+  const it=items.find(i=>i.Id===draft.id);const m=missing(it);
+  $('bSave').textContent=m>0?'Encore '+m+' photo'+(m>1?'s':''):'Enregistrer et suivant';
+  $('bSave').disabled=m>0;
+  const f=$('force');if(f)f.hidden=!(m>0&&draft.com.trim());
 }
 function draw(){
   const it=items.find(i=>i.Id===draft.id);
   const o=order();const pos=o.findIndex(x=>x.Id===it.Id);
-  const unitOpts='<option value="">Unité</option>'+UNITS.map(u=>'<option'+(draft.unit===u?' selected':'')+'>'+u+'</option>').join('');
   const th=draft.photos.map((p,k)=>'<div class="th"><img src="'+p.url+'" alt=""><button onclick="rmPhoto('+k+')" aria-label="Retirer">x</button></div>').join('');
   show(banners()+
   '<div class="card">'+
-    '<div class="tag">'+esc(it.Ligne)+(pos>=0?' · '+(pos+1)+' sur '+o.length+' dans la sélection':'')+(it.Traitee?' · déjà traitée':'')+'</div>'+
+    '<div class="tag">'+esc(it.Ligne)+' · '+esc(it.Groupe||'')+(pos>=0?' · '+(pos+1)+' sur '+o.length+' dans la sélection':'')+(done(it)?' · complète':'')+'</div>'+
     '<h1>'+esc(it.Title)+'</h1>'+
-    '<div class="meta">'+esc([it.Rayon,it.Position&&'Position '+it.Position,it.Emplacement,it.NumFiche&&'Fiche '+it.NumFiche].filter(Boolean).join(' · '))+'</div>'+
+    '<div class="meta">'+esc([it.Rayon,it.Position&&'Position '+it.Position,it.NumFiche&&'Fiche '+it.NumFiche].filter(Boolean).join(' · '))+'</div>'+
     '<div class="meta">Réf. fabricant : <b>'+esc(it.RefFabricant||'-')+'</b> · Réf. interne : <b>'+esc(it.RefInterne||'-')+'</b></div>'+
     '<div class="meta">'+esc([it.Marque,it.Modele,it.TypePiece].filter(Boolean).join(' · '))+'</div>'+
-    '<div class="qte">Quantité inventoriée : '+esc(it.QteInventoriee==null?'-':it.QteInventoriee)+' '+esc(it.UniteInv||'')+'</div>'+
+    '<div class="qte">Quantité : '+esc(it.QteInventoriee==null?'-':it.QteInventoriee)+'</div>'+
   '</div>'+
   '<div class="card">'+
-    '<div class="row"><button class="btn alt" onclick="$(\'fileCam\').click()">Prendre une photo</button><button class="btn alt" onclick="$(\'fileGal\').click()">Galerie</button></div>'+
+    '<div class="tag">Photos enregistrées : '+(it.NbPhotos||0)+' · minimum '+MINP+' par pièce (vue d\'ensemble, puis référence ou étiquette)</div>'+
+    '<div class="row" style="margin-top:8px"><button class="btn alt" onclick="$(\'fileCam\').click()">Prendre une photo</button><button class="btn alt" onclick="$(\'fileGal\').click()">Galerie</button></div>'+
     '<div class="photos">'+th+'</div>'+
-    (it.Attachments?'<div class="tag" style="margin-top:6px">Des photos existent déjà sur cette ligne.</div>':'')+
-    '<label for="dRefs">Références complémentaires</label><input type="text" id="dRefs" value="'+esc(draft.refs)+'" autocomplete="off">'+
-    '<div class="row"><div><label for="dQu">Quantité unitaire</label><input type="number" id="dQu" inputmode="decimal" step="any" value="'+esc(draft.qu)+'"></div>'+
-    '<div><label for="dUn">Unité de comptage</label><select class="f" id="dUn">'+unitOpts+'</select></div></div>'+
     '<label for="dCom">Commentaire</label><textarea id="dCom">'+esc(draft.com)+'</textarea>'+
+    '<button class="link" id="force" hidden>Valider sans 2 photos (pièce introuvable ou illisible)</button>'+
   '</div>');
-  $('dRefs').oninput=e=>draft.refs=e.target.value;
-  $('dQu').oninput=e=>draft.qu=e.target.value;
-  $('dUn').onchange=e=>draft.unit=e.target.value;
-  $('dCom').oninput=e=>draft.com=e.target.value;
+  $('dCom').oninput=e=>{draft.com=e.target.value;foot()};
+  $('force').onclick=()=>{draft.force=true;save()};
+  foot();
 }
 
 async function shrink(file){
@@ -228,21 +234,20 @@ function nextId(from,dir){
   const k2=items.findIndex(x=>x.Id===from);const p=[...o].reverse().find(x=>items.indexOf(x)<k2);return p?p.Id:(o.length?o[o.length-1].Id:null);
 }
 
-$('bSave').onclick=()=>{
+function save(){
   if(!draft)return;
   const it=items.find(i=>i.Id===draft.id);
-  const fields={Traitee:true,RefsComp:draft.refs||'',Commentaire:draft.com||''};
-  if(draft.qu!==''&&!isNaN(Number(draft.qu)))fields.QteUnitaire=Number(draft.qu);
-  if(draft.unit)fields.UniteComptage=draft.unit;
-  const job={id:it.Id,ligne:it.Ligne,fields,photos:draft.photos.map(p=>p.blob),done:0};
-  const before=it.Traitee;
+  if(missing(it)>0&&!draft.force)return;
+  const nb=(it.NbPhotos||0)+draft.photos.length;
+  const fields={Traitee:true,NbPhotos:nb,Commentaire:draft.com||''};
+  const job={id:it.Id,ligne:it.Ligne,fields,photos:draft.photos.map(p=>p.blob),done:0,prev:{Traitee:it.Traitee,NbPhotos:it.NbPhotos}};
   const nxt=nextId(it.Id,1);
-  Object.assign(it,{Traitee:true,RefsComp:fields.RefsComp,Commentaire:fields.Commentaire,QteUnitaire:fields.QteUnitaire==null?it.QteUnitaire:fields.QteUnitaire,UniteComptage:fields.UniteComptage||it.UniteComptage});
-  if(job.photos.length)it.Attachments=true;
+  Object.assign(it,{Traitee:true,NbPhotos:nb,Commentaire:fields.Commentaire});
   run(job);
   const n=(nxt===it.Id&&$('fMode').value==='todo')?firstOrder():nxt;
   openItem(n);
-};
+}
+$('bSave').onclick=save;
 $('bSkip').onclick=()=>{ if(draft)openItem(nextId(draft.id,1)) };
 $('bPrev').onclick=()=>{ if(draft)openItem(nextId(draft.id,-1)) };
 
@@ -256,12 +261,12 @@ async function run(job){
     await sp(GL+"/items("+job.id+")",{method:'POST',headers:{'Content-Type':'application/json;odata=nometadata','X-HTTP-Method':'MERGE','IF-MATCH':'*'},body:JSON.stringify(job.fields)});
   }catch(e){
     failed.push({job,err:e.message||String(e)});
-    const it=items.find(i=>i.Id===job.id);if(it)it.Traitee=false;
+    const it=items.find(i=>i.Id===job.id);if(it)Object.assign(it,job.prev);
   }finally{pending--;stats();if(draft)draw()}
 }
-function retry(k){const f=failed.splice(k,1)[0];const it=items.find(i=>i.Id===f.job.id);if(it)it.Traitee=true;run(f.job);if(draft)draw()}
+function retry(k){const f=failed.splice(k,1)[0];const it=items.find(i=>i.Id===f.job.id);if(it)Object.assign(it,{Traitee:true,NbPhotos:f.job.fields.NbPhotos});run(f.job);if(draft)draw()}
 
-['fRay','fMode'].forEach(id=>$(id).onchange=()=>openItem(firstOrder()));
+['fGrp','fRay','fMode'].forEach(id=>$(id).onchange=()=>openItem(firstOrder()));
 let qt;$('fQ').oninput=()=>{clearTimeout(qt);qt=setTimeout(()=>openItem(firstOrder()),300)};
 $('reload').onclick=()=>{ if(pending){alert('Envois en cours, patientez.');return} load() };
 $('out').onclick=()=>pca.logoutRedirect({account:pca.getAllAccounts()[0],postLogoutRedirectUri:location.origin+location.pathname});
